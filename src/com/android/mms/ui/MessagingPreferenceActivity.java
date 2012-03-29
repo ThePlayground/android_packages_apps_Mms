@@ -39,6 +39,7 @@ import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
+import android.preference.Preference.OnPreferenceChangeListener;
 import android.provider.SearchRecentSuggestions;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -50,7 +51,8 @@ import com.android.mms.util.Recycler;
  * With this activity, users can set preferences for MMS and SMS and
  * can access and manipulate SMS messages stored on the SIM.
  */
-public class MessagingPreferenceActivity extends PreferenceActivity {
+public class MessagingPreferenceActivity extends PreferenceActivity
+            implements OnPreferenceChangeListener {
     // Symbolic names for the keys used for preference lookup
     public static final String MMS_DELIVERY_REPORT_MODE = "pref_key_mms_delivery_reports";
     public static final String EXPIRY_TIME              = "pref_key_mms_expiry";
@@ -71,15 +73,18 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
     public static final String SHOW_GESTURE = "pref_key_templates_show_gesture";
     public static final String GESTURE_SENSITIVITY = "pref_key_templates_gestures_sensitivity";
     public static final String GESTURE_SENSITIVITY_VALUE = "pref_key_templates_gestures_sensitivity_value";
-    public static final String STRIP_UNICODE            = "pref_key_strip_unicode";
     public static final String FULL_TIMESTAMP           = "pref_key_mms_full_timestamp";
     public static final String SENT_TIMESTAMP           = "pref_key_mms_use_sent_timestamp";
+    public static final String NOTIFICATION_VIBRATE_PATTERN = "pref_key_mms_notification_vibrate_pattern";
+    public static final String NOTIFICATION_VIBRATE_PATTERN_CUSTOM = "pref_key_mms_notification_vibrate_pattern_custom";
+    public static final String NOTIFICATION_VIBRATE_CALL ="pre_key_mms_notification_vibrate_call";
 
     // Menu entries
     private static final int MENU_RESTORE_DEFAULTS    = 1;
 
     private Preference mSmsLimitPref;
     private Preference mSmsDeliveryReportPref;
+    private CheckBoxPreference mSmsSplitCounterPref;
     private Preference mMmsLimitPref;
     private Preference mMmsDeliveryReportPref;
     private Preference mMmsReadReportPref;
@@ -93,6 +98,8 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
     private Preference mManageTemplate;
     private ListPreference mGestureSensitivity;
     private static final int CONFIRM_CLEAR_SEARCH_HISTORY_DIALOG = 3;
+    private CharSequence[] mVibrateEntries;
+    private CharSequence[] mVibrateValues;
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -102,6 +109,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
         mManageSimPref = findPreference("pref_key_manage_sim_messages");
         mSmsLimitPref = findPreference("pref_key_sms_delete_limit");
         mSmsDeliveryReportPref = findPreference("pref_key_sms_delivery_reports");
+        mSmsSplitCounterPref = (CheckBoxPreference) findPreference("pref_key_sms_split_counter");
         mMmsDeliveryReportPref = findPreference("pref_key_mms_delivery_reports");
         mMmsReadReportPref = findPreference("pref_key_mms_read_reports");
         mMmsLimitPref = findPreference("pref_key_mms_delete_limit");
@@ -111,6 +119,9 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
         mEnableContactAvatarPref = (CheckBoxPreference) findPreference(NOTIFICATION_AVATAR);
         mManageTemplate = findPreference(MANAGE_TEMPLATES);
         mGestureSensitivity = (ListPreference) findPreference(GESTURE_SENSITIVITY);
+
+        mVibrateEntries = getResources().getTextArray(R.array.prefEntries_vibrateWhen);
+        mVibrateValues = getResources().getTextArray(R.array.prefValues_vibrateWhen);
 
         ActionBar actionBar = getActionBar();
         actionBar.setDisplayHomeAsUpEnabled(true);
@@ -124,6 +135,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
         // Since the enabled notifications pref can be changed outside of this activity,
         // we have to reload it whenever we resume.
         setEnabledNotificationsPref();
+        registerListeners();
     }
 
     private void setMessagePreferences() {
@@ -138,6 +150,13 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
             PreferenceCategory smsCategory =
                 (PreferenceCategory)findPreference("pref_key_sms_settings");
             smsCategory.removePreference(mSmsDeliveryReportPref);
+        }
+
+        if (!MmsConfig.getSplitSmsEnabled()) {
+            // SMS Split disabled, remove SplitCounter pref
+            PreferenceCategory smsCategory =
+                (PreferenceCategory)findPreference("pref_key_sms_settings");
+            smsCategory.removePreference(mSmsSplitCounterPref);
         }
 
         if (!MmsConfig.getMmsEnabled()) {
@@ -208,6 +227,8 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
         // Fix up the recycler's summary with the correct values
         setSmsDisplayLimit();
         setMmsDisplayLimit();
+
+        adjustVibrateSummary(mVibrateWhenPref.getValue());
     }
 
     private void setEnabledNotificationsPref() {
@@ -358,5 +379,29 @@ public class MessagingPreferenceActivity extends PreferenceActivity {
         boolean avatarsEnabled =
             prefs.getBoolean(MessagingPreferenceActivity.NOTIFICATION_AVATAR, true);
         return avatarsEnabled;
+    }
+
+    private void registerListeners() {
+        mVibrateWhenPref.setOnPreferenceChangeListener(this);
+    }
+
+    public boolean onPreferenceChange(Preference preference, Object newValue) {
+        boolean result = false;
+        if (preference == mVibrateWhenPref) {
+            adjustVibrateSummary((String)newValue);
+            result = true;
+        }
+        return result;
+    }
+
+    private void adjustVibrateSummary(String value) {
+        int len = mVibrateValues.length;
+        for (int i = 0; i < len; i++) {
+            if (mVibrateValues[i].equals(value)) {
+                mVibrateWhenPref.setSummary(mVibrateEntries[i]);
+                return;
+            }
+        }
+        mVibrateWhenPref.setSummary(null);
     }
 }

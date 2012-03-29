@@ -58,6 +58,7 @@ import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.Sms;
+import android.telephony.TelephonyManager;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
@@ -66,6 +67,7 @@ import android.util.Log;
 import android.widget.RemoteViews;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
@@ -140,7 +142,7 @@ public class MessagingNotification {
 
     private MessagingNotification() {
     }
-    
+
     // this is the phone number of the last contact to message us and is
     // used to find the avatar for the sender.
     private static String lastSender = "";
@@ -442,7 +444,7 @@ public class MessagingNotification {
                 0, senderInfo.length() - 2);
         CharSequence ticker = buildTickerMessage(
                 context, address, subject, body);
-        
+
         lastSender = address;
 
         return new MmsSmsNotificationInfo(
@@ -496,7 +498,7 @@ public class MessagingNotification {
         notificationbuilder
             .setTicker(ticker)
             .setWhen(timeMillis);
-        
+
         int notificationdefaults = Notification.DEFAULT_LIGHTS;
 
         // If we have more than one unique thread, change the title (which would
@@ -512,38 +514,38 @@ public class MessagingNotification {
                     | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
             clickIntent.setType("vnd.android-dir/mms-sms");
-        } else if (MessagingPreferenceActivity.getContactAvtarEnabled(context))
+        } else
         {
-        	// If we're in here, we only have one unique thread and the avatars
-        	// are enabled, so we should show the picture of the sender if it exists.
-        	Drawable avatarDraw = Contact.get(lastSender, true).getAvatar(context, null);
-        	
-        	try {
-	        	if(avatarDraw != null) {
-	                // Create the large notification icon
-	        		Bitmap avatarBit = ((BitmapDrawable)avatarDraw).getBitmap();
-	        		int iconSize = context.getResources().getDimensionPixelSize(android.R.dimen.notification_large_icon_height);
-	        		
-	        		// Resize it if it's a weird size
-	                int imageWidth = avatarBit.getWidth();
-	                int imageHeight = avatarBit.getHeight();
-	                int iconWidth = iconSize;
-	                int iconHeight = iconSize;
-	                if (imageWidth > imageHeight) {
-	                    iconWidth = (int) (((float) iconHeight / imageHeight) * imageWidth);
-	                } else {
-	                    iconHeight = (int) (((float) iconWidth / imageWidth) * imageHeight);
-	                }
-	                
-	        		Bitmap croppedAvatar = Bitmap.createBitmap(avatarBit, (iconWidth - iconSize) / 2,
-	                        (iconHeight - iconSize) / 2, iconSize, iconSize);
-	        		
-	        		notificationbuilder.setLargeIcon(croppedAvatar);
-	        	}
-        	} catch (Exception e) {
-        		// Something happened, but we'll just use the original icon
-        		Log.v(TAG, "Failed to set bitmap for contact");
-        	}
+            // If we're in here, we only have one unique thread so we should show
+            // the picture of the sender if it exists.
+            Drawable avatarDraw = Contact.get(lastSender, true).getAvatar(context, null);
+
+            try {
+                if (avatarDraw != null) {
+                   // Create the large notification icon
+                   Bitmap avatarBit = ((BitmapDrawable)avatarDraw).getBitmap();
+                   int iconSize = context.getResources().getDimensionPixelSize(android.R.dimen.notification_large_icon_height);
+
+                   // Resize it if it's a weird size
+                   int imageWidth = avatarBit.getWidth();
+                   int imageHeight = avatarBit.getHeight();
+                   int iconWidth = iconSize;
+                   int iconHeight = iconSize;
+                   if (imageWidth > imageHeight) {
+                       iconWidth = (int) (((float) iconHeight / imageHeight) * imageWidth);
+                   } else {
+                       iconHeight = (int) (((float) iconWidth / imageWidth) * imageHeight);
+                   }
+
+                   Bitmap croppedAvatar = Bitmap.createBitmap(avatarBit, (iconWidth - iconSize) / 2,
+                       (iconHeight - iconSize) / 2, iconSize, iconSize);
+
+                   notificationbuilder.setLargeIcon(croppedAvatar);
+                   }
+            } catch (Exception e) {
+                    // Something happened, but we'll just use the original icon
+                    Log.v(TAG, "Failed to set bitmap for contact");
+            }
         }
 
         // If there is more than one message, change the description (which
@@ -578,6 +580,10 @@ public class MessagingNotification {
                 vibrateWhen = context.getString(R.string.prefDefault_vibrateWhen);
             }
 
+            TelephonyManager mTM = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+            boolean callStateIdle = mTM.getCallState() == TelephonyManager.CALL_STATE_IDLE;
+            boolean vibrateOnCall = sp.getBoolean(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_CALL, true);
+
             boolean vibrateAlways = vibrateWhen.equals("always");
             boolean vibrateSilent = vibrateWhen.equals("silent");
             AudioManager audioManager =
@@ -585,8 +591,16 @@ public class MessagingNotification {
             boolean nowSilent =
                 audioManager.getRingerMode() == AudioManager.RINGER_MODE_VIBRATE;
 
-            if (vibrateAlways || vibrateSilent && nowSilent) {
-            	notificationdefaults |= Notification.DEFAULT_VIBRATE;
+            if ((vibrateAlways || vibrateSilent && nowSilent) && (vibrateOnCall || (!vibrateOnCall && callStateIdle))) {
+                /* WAS: notificationdefaults |= Notification.DEFAULT_VIBRATE;*/
+                String mVibratePattern = "custom".equals(sp.getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_PATTERN, null))
+                    ? sp.getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_PATTERN_CUSTOM, "0,1200")
+                    : sp.getString(MessagingPreferenceActivity.NOTIFICATION_VIBRATE_PATTERN, "0,1200");
+                if(!mVibratePattern.equals("")) {
+                    notificationbuilder.setVibrate(parseVibratePattern(mVibratePattern));
+                } else {
+                        notificationdefaults |= Notification.DEFAULT_VIBRATE;
+                }
             }
 
             String ringtoneStr = sp.getString(MessagingPreferenceActivity.NOTIFICATION_RINGTONE,
@@ -602,7 +616,7 @@ public class MessagingNotification {
 
         NotificationManager nm = (NotificationManager)
             context.getSystemService(Context.NOTIFICATION_SERVICE);
-        
+
         Notification notification = notificationbuilder.getNotification();
         notification.flags |= Notification.FLAG_SHOW_LIGHTS;
 
@@ -835,4 +849,37 @@ public class MessagingNotification {
     public static boolean isFailedToDownload(Intent intent) {
         return (intent != null) && intent.getBooleanExtra("failed_download_flag", false);
     }
+
+    // Parse the user provided custom vibrate pattern into a long[]
+    public static long[] parseVibratePattern(String stringPattern) {
+      ArrayList<Long> arrayListPattern = new ArrayList<Long>();
+      Long l;
+      String[] splitPattern = stringPattern.split(",");
+      int VIBRATE_PATTERN_MAX_SECONDS = 60000;
+      int VIBRATE_PATTERN_MAX_PATTERN = 100;
+
+      for (int i = 0; i < splitPattern.length; i++) {
+        try {
+          l = Long.parseLong(splitPattern[i].trim());
+        } catch (NumberFormatException e) {
+          return null;
+        }
+        if (l > VIBRATE_PATTERN_MAX_SECONDS) {
+          return null;
+        }
+        arrayListPattern.add(l);
+      }
+
+      int size = arrayListPattern.size();
+      if (size > 0 && size < VIBRATE_PATTERN_MAX_PATTERN) {
+        long[] pattern = new long[size];
+        for (int i = 0; i < pattern.length; i++) {
+          pattern[i] = arrayListPattern.get(i);
+        }
+        return pattern;
+      }
+
+      return null;
+    }
+
 }
