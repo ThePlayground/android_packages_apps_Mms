@@ -109,6 +109,12 @@
                         android:defaultValue="true"
                         android:title="@string/pref_title_mms_notification_vibrate_call"
                         android:summary="@string/pref_summary_mms_notification_vibrate_call" />
+    <CheckBoxPreference android:layout="?android:attr/preferenceLayoutChild"
+                        android:dependency="pref_key_enable_notifications"
+                        android:defaultValue="true"
+                        android:key="pref_key_avatar"
+                        android:summary="@string/pref_summary_notification_show_avatar"
+                        android:title="@string/pref_title_notification_show_avatar" />
   </PreferenceCategory>
 
   <PreferenceCategory android:title="@string/pref_extra_settings">
