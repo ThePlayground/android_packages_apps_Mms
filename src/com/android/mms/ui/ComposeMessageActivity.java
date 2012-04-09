@@ -40,15 +40,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
-import java.text.Normalizer;
 
 import android.app.ActionBar;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.LoaderManager;
 import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
 import android.content.AsyncQueryHandler;
@@ -57,26 +52,17 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.CursorLoader;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.DialogInterface.OnClickListener;
-import android.content.Loader;
-import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SqliteWrapper;
 import android.drm.mobile1.DrmException;
 import android.drm.mobile1.DrmRawContent;
-import android.gesture.Gesture;
-import android.gesture.GestureLibrary;
-import android.gesture.GestureOverlayView;
-import android.gesture.GestureOverlayView.OnGesturePerformedListener;
-import android.gesture.Prediction;
 import android.graphics.drawable.Drawable;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -87,7 +73,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.Parcelable;
 import android.os.SystemProperties;
-import android.preference.PreferenceManager;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.CommonDataKinds.Email;
 import android.provider.ContactsContract.Contacts;
@@ -133,7 +118,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.SimpleAdapter;
-import android.widget.SimpleCursorAdapter;
 import android.widget.CursorAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -160,8 +144,6 @@ import com.google.android.mms.pdu.SendReq;
 import com.google.android.mms.util.PduCache;
 import com.android.mms.model.SlideModel;
 import com.android.mms.model.SlideshowModel;
-import com.android.mms.templates.TemplateGesturesLibrary;
-import com.android.mms.templates.TemplatesProvider.Template;
 import com.android.mms.transaction.MessagingNotification;
 import com.android.mms.ui.MessageUtils.ResizeImageResultCallback;
 import com.android.mms.ui.RecipientsEditor.RecipientContextMenuInfo;
@@ -185,8 +167,7 @@ import android.text.InputFilter.LengthFilter;
  */
 public class ComposeMessageActivity extends Activity
         implements View.OnClickListener, TextView.OnEditorActionListener,
-        MessageStatusListener, Contact.UpdateListener, OnGesturePerformedListener,
-        LoaderManager.LoaderCallbacks<Cursor>  {
+        MessageStatusListener, Contact.UpdateListener {
     public static final int REQUEST_CODE_ATTACH_IMAGE     = 100;
     public static final int REQUEST_CODE_TAKE_PICTURE     = 101;
     public static final int REQUEST_CODE_ATTACH_VIDEO     = 102;
@@ -235,14 +216,6 @@ public class ComposeMessageActivity extends Activity
     private static final int MENU_UNLOCK_MESSAGE        = 29;
     private static final int MENU_COPY_TO_DRM_PROVIDER  = 30;
     private static final int MENU_PREFERENCES           = 31;
-
-    private static final int MENU_ADD_TEMPLATE          = 32;
-
-    private static final int DIALOG_TEMPLATE_SELECT     = 1;
-    private static final int DIALOG_TEMPLATE_NOT_AVAILABLE = 2;
-
-    private static final int LOAD_TEMPLATE_BY_ID        = 0;
-    private static final int LOAD_TEMPLATES             = 1;
 
     private static final int RECIPIENTS_MAX_LENGTH = 312;
 
@@ -313,12 +286,6 @@ public class ComposeMessageActivity extends Activity
 
     private String mDebugRecipients;
 
-    private GestureLibrary mLibrary;
-
-    private SimpleCursorAdapter mTemplatesCursorAdapter;
-
-    private double mGestureSensitivity;
-
     @SuppressWarnings("unused")
     public static void log(String logMsg) {
         Thread current = Thread.currentThread();
@@ -333,71 +300,6 @@ public class ComposeMessageActivity extends Activity
     //==========================================================
     // Inner classes
     //==========================================================
-
-    // InputFilter which attempts to substitute characters that cannot be
-    // encoded in the limited GSM 03.38 character set. In many cases this will
-    // prevent the keyboards auto-correction feature from inserting characters
-    // that would switch the message from 7-bit GSM encoding (160 char limit)
-    // to 16-bit Unicode encoding (70 char limit).
-
-    private class StripUnicode implements InputFilter {
-
-        private CharsetEncoder gsm =
-            Charset.forName("gsm-03.38-2000").newEncoder();
-
-        private Pattern diacritics =
-            Pattern.compile("\\p{InCombiningDiacriticalMarks}");
-
-        public CharSequence filter(CharSequence source, int start, int end,
-                                   Spanned dest, int dstart, int dend) {
-
-            Boolean unfiltered = true;
-            StringBuilder output = new StringBuilder(end - start);
-
-            for (int i = start; i < end; i++) {
-                char c = source.charAt(i);
-
-                // Character is encodable by GSM, skip filtering
-                if (gsm.canEncode(c)) {
-                    output.append(c);
-                }
-                // Character requires Unicode, try to replace it
-                else {
-                    unfiltered = false;
-                    String s = String.valueOf(c);
-
-                    // Try normalizing the character into Unicode NFKD form and
-                    // stripping out diacritic mark characters.
-                    s = Normalizer.normalize(s, Normalizer.Form.NFKD);
-                    s = diacritics.matcher(s).replaceAll("");
-
-                    // Special case characters that don't get stripped by the
-                    // above technique.
-                    s = s.replace("Œ", "OE");
-                    s = s.replace("œ", "oe");
-
-                    output.append(s);
-                }
-            }
-
-            // No changes were attempted, so don't return anything
-            if (unfiltered) {
-                return null;
-            }
-            // Source is a spanned string, so copy the spans from it
-            else if (source instanceof Spanned) {
-                SpannableString spannedoutput = new SpannableString(output);
-                TextUtils.copySpansFrom(
-                    (Spanned) source, start, end, null, spannedoutput, 0);
-
-                return spannedoutput;
-            }
-            // Source is a vanilla charsequence, so return output as-is
-            else {
-                return output;
-            }
-        }
-    }
 
     private void editSlideshow() {
         Uri dataUri = mWorkingMessage.saveAsMms(false);
@@ -1817,24 +1719,7 @@ public class ComposeMessageActivity extends Activity
 
         resetConfiguration(getResources().getConfiguration());
 
-        SharedPreferences prefs = PreferenceManager
-                .getDefaultSharedPreferences((Context) ComposeMessageActivity.this);
-        mGestureSensitivity = prefs
-                .getInt(MessagingPreferenceActivity.GESTURE_SENSITIVITY_VALUE, 3);
-        boolean showGesture = prefs.getBoolean(MessagingPreferenceActivity.SHOW_GESTURE, false);
-        boolean stripUnicode = prefs.getBoolean(MessagingPreferenceActivity.STRIP_UNICODE, false);
-
-        mLibrary = TemplateGesturesLibrary.getStore(this);
-
-        int layout = R.layout.compose_message_activity;
-
-        GestureOverlayView gestureOverlayView = new GestureOverlayView(this);
-        View inflate = getLayoutInflater().inflate(layout, null);
-        gestureOverlayView.addView(inflate);
-        gestureOverlayView.setEventsInterceptionEnabled(true);
-        gestureOverlayView.setGestureVisible(showGesture);
-        gestureOverlayView.addOnGesturePerformedListener(this);
-        setContentView(gestureOverlayView);
+        setContentView(R.layout.compose_message_activity);
         setProgressBarVisibility(false);
 
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
@@ -1842,14 +1727,6 @@ public class ComposeMessageActivity extends Activity
 
         // Initialize members for UI elements.
         initResourceRefs();
-
-        LengthFilter lengthFilter = new LengthFilter(MmsConfig.getMaxTextLimit());
-
-        if (stripUnicode) {
-            mTextEditor.setFilters(new InputFilter[] { new StripUnicode(), lengthFilter });
-        } else {
-            mTextEditor.setFilters(new InputFilter[] { lengthFilter });
-        }
 
         mContentResolver = getContentResolver();
         mBackgroundQueryHandler = new BackgroundQueryHandler(mContentResolver);
@@ -2515,10 +2392,6 @@ public class ComposeMessageActivity extends Activity
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);    // add to actionbar
         }
 
-        menu.add(0, MENU_ADD_TEMPLATE, 0, R.string.template_insert)
-                .setIcon(android.R.drawable.ic_menu_add)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-
         if (isPreparedForSending()) {
             menu.add(0, MENU_SEND, 0, R.string.send).setIcon(android.R.drawable.ic_menu_send);
         }
@@ -2633,9 +2506,6 @@ public class ComposeMessageActivity extends Activity
                 mWorkingMessage.dump();
                 Conversation.dump();
                 LogTag.dumpInternalTables(this);
-                break;
-            case MENU_ADD_TEMPLATE:
-                startLoadingTemplates();
                 break;
         }
 
@@ -3389,6 +3259,8 @@ public class ComposeMessageActivity extends Activity
         mTextEditor = (EditText) findViewById(R.id.embedded_text_editor);
         mTextEditor.setOnEditorActionListener(this);
         mTextEditor.addTextChangedListener(mTextEditorWatcher);
+        mTextEditor.setFilters(new InputFilter[] {
+                new LengthFilter(MmsConfig.getMaxTextLimit())});
         mTextCounter = (TextView) findViewById(R.id.text_counter);
         mSendButtonMms = (TextView) findViewById(R.id.send_button_mms);
         mSendButtonSms = (ImageButton) findViewById(R.id.send_button_sms);
@@ -4031,89 +3903,5 @@ public class ComposeMessageActivity extends Activity
             }
         }
         return null;
-    }
-
-    private void startLoadingTemplates() {
-        setProgressBarIndeterminateVisibility(true);
-        getLoaderManager().restartLoader(LOAD_TEMPLATES, null, this);
-    }
-
-    @Override
-    public void onGesturePerformed(GestureOverlayView overlay, Gesture gesture) {
-        ArrayList<Prediction> predictions = mLibrary.recognize(gesture);
-        for (Prediction prediction : predictions) {
-            if (prediction.score > mGestureSensitivity) {
-                Bundle b = new Bundle();
-                b.putLong("id", Long.parseLong(prediction.name));
-                getLoaderManager().initLoader(LOAD_TEMPLATE_BY_ID, b, this);
-            }
-        }
-    }
-
-    @Override
-    public Loader<Cursor> onCreateLoader(int id, Bundle args) {
-        if (id == LOAD_TEMPLATE_BY_ID) {
-            long rowID = args.getLong("id");
-            Uri uri = ContentUris.withAppendedId(Template.CONTENT_URI, rowID);
-            return new CursorLoader(this, uri, null, null, null, null);
-        } else {
-            return new CursorLoader(this, Template.CONTENT_URI, null, null, null, null);
-        }
-    }
-
-    @Override
-    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-
-        if (loader.getId() == LOAD_TEMPLATE_BY_ID) {
-            if (data != null && data.getCount() > 0) {
-                data.moveToFirst();
-                String text = data.getString(data.getColumnIndex(Template.TEXT));
-                mTextEditor.append(text);
-            }
-        }else{
-            setProgressBarIndeterminateVisibility(false);
-            if(data != null && data.getCount() > 0){
-                showDialog(DIALOG_TEMPLATE_SELECT);
-                mTemplatesCursorAdapter.swapCursor(data);
-            }else{
-                showDialog(DIALOG_TEMPLATE_NOT_AVAILABLE);
-            }
-        }
-    }
-
-    @Override
-    public void onLoaderReset(Loader<Cursor> loader) {
-    }
-
-    @Override
-    protected Dialog onCreateDialog(int id, Bundle args) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        switch (id) {
-            case DIALOG_TEMPLATE_NOT_AVAILABLE:
-                builder.setTitle(R.string.template_not_present_error_title);
-                builder.setMessage(R.string.template_not_present_error);
-                return builder.create();
-
-            case DIALOG_TEMPLATE_SELECT:
-                builder = new AlertDialog.Builder(this);
-                builder.setTitle(R.string.template_select);
-                mTemplatesCursorAdapter  = new SimpleCursorAdapter(this,
-                        android.R.layout.simple_list_item_1, null, new String[] {
-                        Template.TEXT
-                    }, new int[] {
-                        android.R.id.text1
-                    }, CursorAdapter.FLAG_REGISTER_CONTENT_OBSERVER);
-                builder.setAdapter(mTemplatesCursorAdapter, new DialogInterface.OnClickListener(){
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                       Cursor c = (Cursor) mTemplatesCursorAdapter.getItem(which);
-                       String text = c.getString(c.getColumnIndex(Template.TEXT));
-                       mTextEditor.append(text);
-                    }
-
-                });
-                return builder.create();
-        }
-        return super.onCreateDialog(id, args);
     }
 }

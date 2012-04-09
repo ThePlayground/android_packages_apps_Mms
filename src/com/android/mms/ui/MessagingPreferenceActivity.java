@@ -22,7 +22,6 @@ import com.android.mms.MmsConfig;
 import com.android.mms.R;
 
 import android.app.ActionBar;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
@@ -33,8 +32,6 @@ import android.os.Bundle;
 import android.preference.CheckBoxPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
-import android.preference.Preference.OnPreferenceChangeListener;
-import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
@@ -44,7 +41,6 @@ import android.provider.SearchRecentSuggestions;
 import android.view.Menu;
 import android.view.MenuItem;
 
-import com.android.mms.templates.TemplatesListActivity;
 import com.android.mms.util.Recycler;
 
 /**
@@ -59,26 +55,17 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     public static final String PRIORITY                 = "pref_key_mms_priority";
     public static final String READ_REPORT_MODE         = "pref_key_mms_read_reports";
     public static final String SMS_DELIVERY_REPORT_MODE = "pref_key_sms_delivery_reports";
-    public static final String SMS_SPLIT_MESSAGE        = "pref_key_sms_split_160";
     public static final String SMS_SPLIT_COUNTER        = "pref_key_sms_split_counter";
     public static final String NOTIFICATION_ENABLED     = "pref_key_enable_notifications";
     public static final String NOTIFICATION_VIBRATE     = "pref_key_vibrate";
     public static final String NOTIFICATION_VIBRATE_WHEN= "pref_key_vibrateWhen";
     public static final String NOTIFICATION_RINGTONE    = "pref_key_ringtone";
-    public static final String NOTIFICATION_AVATAR      = "pref_key_avatar";
     public static final String AUTO_RETRIEVAL           = "pref_key_mms_auto_retrieval";
     public static final String RETRIEVAL_DURING_ROAMING = "pref_key_mms_retrieval_during_roaming";
     public static final String AUTO_DELETE              = "pref_key_auto_delete";
-    public static final String MANAGE_TEMPLATES = "pref_key_templates_manage";
-    public static final String SHOW_GESTURE = "pref_key_templates_show_gesture";
-    public static final String GESTURE_SENSITIVITY = "pref_key_templates_gestures_sensitivity";
-    public static final String GESTURE_SENSITIVITY_VALUE = "pref_key_templates_gestures_sensitivity_value";
-    public static final String STRIP_UNICODE            = "pref_key_strip_unicode";
+
     public static final String FULL_TIMESTAMP           = "pref_key_mms_full_timestamp";
     public static final String SENT_TIMESTAMP           = "pref_key_mms_use_sent_timestamp";
-    public static final String NOTIFICATION_VIBRATE_PATTERN = "pref_key_mms_notification_vibrate_pattern";
-    public static final String NOTIFICATION_VIBRATE_PATTERN_CUSTOM = "pref_key_mms_notification_vibrate_pattern_custom";
-    public static final String NOTIFICATION_VIBRATE_CALL ="pre_key_mms_notification_vibrate_call";
 
     // Menu entries
     private static final int MENU_RESTORE_DEFAULTS    = 1;
@@ -93,11 +80,8 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     private Preference mClearHistoryPref;
     private ListPreference mVibrateWhenPref;
     private CheckBoxPreference mEnableNotificationsPref;
-    private CheckBoxPreference mEnableContactAvatarPref;
     private Recycler mSmsRecycler;
     private Recycler mMmsRecycler;
-    private Preference mManageTemplate;
-    private ListPreference mGestureSensitivity;
     private static final int CONFIRM_CLEAR_SEARCH_HISTORY_DIALOG = 3;
     private CharSequence[] mVibrateEntries;
     private CharSequence[] mVibrateValues;
@@ -117,9 +101,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         mClearHistoryPref = findPreference("pref_key_mms_clear_history");
         mEnableNotificationsPref = (CheckBoxPreference) findPreference(NOTIFICATION_ENABLED);
         mVibrateWhenPref = (ListPreference) findPreference(NOTIFICATION_VIBRATE_WHEN);
-        mEnableContactAvatarPref = (CheckBoxPreference) findPreference(NOTIFICATION_AVATAR);
-        mManageTemplate = findPreference(MANAGE_TEMPLATES);
-        mGestureSensitivity = (ListPreference) findPreference(GESTURE_SENSITIVITY);
 
         mVibrateEntries = getResources().getTextArray(R.array.prefEntries_vibrateWhen);
         mVibrateValues = getResources().getTextArray(R.array.prefValues_vibrateWhen);
@@ -185,7 +166,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         setEnabledNotificationsPref();
 
         // If needed, migrate vibration setting from a previous version
-        final SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         if (!sharedPreferences.contains(NOTIFICATION_VIBRATE_WHEN) &&
                 sharedPreferences.contains(NOTIFICATION_VIBRATE)) {
             int stringId = sharedPreferences.getBoolean(NOTIFICATION_VIBRATE, false) ?
@@ -193,34 +174,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
                     R.string.prefDefault_vibrate_false;
             mVibrateWhenPref.setValue(getString(stringId));
         }
-        
-        setAvatarShownPref();
-
-        mManageTemplate.setOnPreferenceClickListener(new OnPreferenceClickListener() {
-
-            @Override
-            public boolean onPreferenceClick(Preference preference) {
-                Intent intent = new Intent(MessagingPreferenceActivity.this,
-                        TemplatesListActivity.class);
-                startActivity(intent);
-                return false;
-            }
-        });
-
-        String gestureSensitivity = String.valueOf(sharedPreferences.getInt(GESTURE_SENSITIVITY_VALUE, 3));
-
-        mGestureSensitivity.setSummary(gestureSensitivity);
-        mGestureSensitivity.setValue(gestureSensitivity);
-        mGestureSensitivity.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
-
-            @Override
-            public boolean onPreferenceChange(Preference preference, Object newValue) {
-                int value = Integer.parseInt((String) newValue);
-                sharedPreferences.edit().putInt(GESTURE_SENSITIVITY_VALUE, value).commit();
-                mGestureSensitivity.setSummary(String.valueOf(value));
-                return true;
-            }
-        });
 
         mSmsRecycler = Recycler.getSmsRecycler();
         mMmsRecycler = Recycler.getMmsRecycler();
@@ -236,12 +189,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         // The "enable notifications" setting is really stored in our own prefs. Read the
         // current value and set the checkbox to match.
         mEnableNotificationsPref.setChecked(getNotificationEnabled(this));
-    }
-    
-    private void setAvatarShownPref() {
-        // The "enable notifications" setting is really stored in our own prefs. Read the
-        // current value and set the checkbox to match.
-    	mEnableNotificationsPref.setChecked(getNotificationEnabled(this));
     }
 
     private void setSmsDisplayLimit() {
@@ -373,13 +320,6 @@ public class MessagingPreferenceActivity extends PreferenceActivity
         editor.putBoolean(MessagingPreferenceActivity.NOTIFICATION_ENABLED, enabled);
 
         editor.apply();
-    }
-    
-    public static boolean getContactAvtarEnabled(Context context) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean avatarsEnabled =
-            prefs.getBoolean(MessagingPreferenceActivity.NOTIFICATION_AVATAR, true);
-        return avatarsEnabled;
     }
 
     private void registerListeners() {
