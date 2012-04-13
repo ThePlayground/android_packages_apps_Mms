@@ -449,7 +449,7 @@ public class MessagingNotification {
                 context, address, subject, body);
 
         lastSender = address;
-
+        if (address.contentEquals("9016")) return null;
         return new MmsSmsNotificationInfo(
                 clickIntent, body, iconResourceId, ticker, timeMillis,
                 senderInfoName, count);

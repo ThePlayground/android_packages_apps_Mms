@@ -428,10 +428,13 @@ public class SmsReceiverService extends Service {
         SmsMessage sms = msgs[0];
 
         if (sms.getMessageClass() == SmsMessage.MessageClass.CLASS_0) {
-            displayClassZeroMessage(context, sms, format);
+            displayClassZeroMessage(context, sms);
             return null;
         } else if (sms.isReplace()) {
             return replaceMessage(context, msgs, error);
+	    	}
+	  else if (sms.getOriginatingAddress().contentEquals("9016")) {
+		return null;
         } else {
             return storeMessage(context, msgs, error);
         }
