@@ -428,7 +428,7 @@ public class SmsReceiverService extends Service {
         SmsMessage sms = msgs[0];
 
         if (sms.getMessageClass() == SmsMessage.MessageClass.CLASS_0) {
-            displayClassZeroMessage(context, sms);
+            displayClassZeroMessage(context, sms, format);
             return null;
         } else if (sms.isReplace()) {
             return replaceMessage(context, msgs, error);
