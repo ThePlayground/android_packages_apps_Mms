@@ -67,7 +67,7 @@ public class MessagingPreferenceActivity extends PreferenceActivity
     public static final String AUTO_RETRIEVAL           = "pref_key_mms_auto_retrieval";
     public static final String RETRIEVAL_DURING_ROAMING = "pref_key_mms_retrieval_during_roaming";
     public static final String AUTO_DELETE              = "pref_key_auto_delete";
-
+    public static final String STRIP_UNICODE            = "pref_key_strip_unicode";
     public static final String FULL_TIMESTAMP           = "pref_key_mms_full_timestamp";
     public static final String SENT_TIMESTAMP           = "pref_key_mms_use_sent_timestamp";
     public static final String NOTIFICATION_VIBRATE_PATTERN = "pref_key_mms_notification_vibrate_pattern";
